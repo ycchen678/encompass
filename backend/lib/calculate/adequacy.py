@@ -88,21 +88,24 @@ def _get_locations_to_check_by_service_area(
         address_values_list=', '.join(address_values)
     )
     gis_query = """
-        SELECT
-            areas.service_area_id AS service_area_id
-            , tmp.idx AS address_idx
-        FROM {service_areas} areas
-        JOIN {temp_table_name} tmp
-            ON (
-            ST_DWithin(areas.location, tmp.location, {radius}, FALSE)
+    SELECT
+        areas.service_area_id AS service_area_id,
+        tmp.idx AS address_idx
+    FROM {service_areas} areas
+    JOIN {temp_table_name} tmp ON (
+        ST_DWithin(areas.location, tmp.location, {radius}, FALSE)
+        AND NOT EXISTS ( -- Ensure no ocean crossing
+            SELECT 1 FROM ocean_shapes os
+            WHERE ST_Intersects(ST_ShortestLine(areas.location, tmp.location), os.geom)
         )
-        WHERE 1=1
-            AND areas.service_area_id IN %(service_area_id_list)s
-        ;
-    """.format(
-        temp_table_name=temp_table_name,
-        service_areas=service_area.ServiceArea.__tablename__,
-        radius=radius_in_meters,
+    )
+    WHERE 1=1
+        AND areas.service_area_id IN %(service_area_id_list)s
+    ;
+""".format(
+    temp_table_name=temp_table_name,
+    service_areas=service_area.ServiceArea.__tablename__,
+    radius=radius_in_meters,
     )
 
     full_query = """
